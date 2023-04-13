@@ -86,10 +86,14 @@ dependencies {
     // for internal usage of things like Opcode
     api "org.ow2.asm:asm:${versions.asm}" // marked as api but manually excluded later in assemble.gradle - modules will use shaded version
     // for internal usage by the parser but manually excluded later in assemble.gradle - modules will use shaded version
-    implementation "org.ow2.asm:asm-analysis:${versions.asm}"
-    implementation "org.ow2.asm:asm-commons:${versions.asm}"
-    implementation "org.ow2.asm:asm-tree:${versions.asm}"
-    implementation "org.ow2.asm:asm-util:${versions.asm}"
+    boolean compileWithAsm = true
+    if (compileWithAsm) {
+        implementation "org.ow2.asm:asm-analysis:${versions.asm}"
+        implementation "org.ow2.asm:asm-commons:${versions.asm}"
+        implementation "org.ow2.asm:asm-tree:${versions.asm}"
+        implementation "org.ow2.asm:asm-util:${versions.asm}"
+    }
+    implementation("org.glavo:classfile:${versions.classfile}")
     implementation "me.champeau.openbeans:openbeans:${versions.openbeans}"
     implementation "me.sunlan:antlr4-runtime:${versions.antlr4}"
 
@@ -266,3 +270,19 @@ tasks.named("dependencyUpdates")?.configure {
         !(it.currentVersion.toLowerCase() ==~ UNSTABLE) && it.candidate.version.toLowerCase() ==~ UNSTABLE
     }
 }
+
+/*
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    //options.release.set(21)
+    options.compilerArgs.addAll([
+        //"--add-exports", "javafx.graphics/com.sun.javafx.tk=com.sampleapp",
+        "--add-exports", "java.base/jdk.internal.classfile=ALL-UNNAMED"
+    ])
+}
+*/

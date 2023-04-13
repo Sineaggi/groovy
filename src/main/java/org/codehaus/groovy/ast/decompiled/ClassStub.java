@@ -18,10 +18,7 @@
  */
 package org.codehaus.groovy.ast.decompiled;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Data structures holding class info to enable lazy loading
@@ -46,6 +43,31 @@ public class ClassStub extends MemberStub {
         this.signature = signature;
         this.superName = superName;
         this.interfaceNames = interfaceNames;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ClassStub classStub = (ClassStub) o;
+        return accessModifiers == classStub.accessModifiers && innerClassModifiers == classStub.innerClassModifiers && Objects.equals(className, classStub.className) && Objects.equals(signature, classStub.signature) && Objects.equals(superName, classStub.superName) && Arrays.equals(interfaceNames, classStub.interfaceNames) && Objects.equals(methods, classStub.methods) && Objects.equals(fields, classStub.fields) && Objects.equals(permittedSubclasses, classStub.permittedSubclasses) && Objects.equals(recordComponents, classStub.recordComponents);
+    }
+
+    @Override
+    public String toString() {
+        return "ClassStub{" +
+               "className='" + className + '\'' +
+               ", accessModifiers=" + accessModifiers +
+               ", signature='" + signature + '\'' +
+               ", superName='" + superName + '\'' +
+               ", interfaceNames=" + Arrays.toString(interfaceNames) +
+               ", methods=" + methods +
+               ", fields=" + fields +
+               ", permittedSubclasses=" + permittedSubclasses +
+               ", recordComponents=" + recordComponents +
+               ", innerClassModifiers=" + innerClassModifiers +
+               ", annotations=" + annotations +
+               '}';
     }
 }
 
@@ -90,6 +112,29 @@ class MethodStub extends MemberStub {
         this.signature = signature;
         this.exceptions = exceptions;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MethodStub that = (MethodStub) o;
+        return accessModifiers == that.accessModifiers && Objects.equals(methodName, that.methodName) && Objects.equals(desc, that.desc) && Objects.equals(signature, that.signature) && Arrays.equals(exceptions, that.exceptions) && Objects.equals(parameterAnnotations, that.parameterAnnotations) && Objects.equals(parameterNames, that.parameterNames) && Objects.equals(annotationDefault, that.annotationDefault);
+    }
+
+    @Override
+    public String toString() {
+        return "MethodStub{" +
+               "methodName='" + methodName + '\'' +
+               ", accessModifiers=" + accessModifiers +
+               ", desc='" + desc + '\'' +
+               ", signature='" + signature + '\'' +
+               ", exceptions=" + Arrays.toString(exceptions) +
+               ", parameterAnnotations=" + parameterAnnotations +
+               ", parameterNames=" + parameterNames +
+               ", annotationDefault=" + annotationDefault +
+               ", annotations=" + annotations +
+               '}';
+    }
 }
 
 class FieldStub extends MemberStub {
@@ -110,6 +155,26 @@ class FieldStub extends MemberStub {
         this.signature = signature;
         this.value = value;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        FieldStub fieldStub = (FieldStub) o;
+        return accessModifiers == fieldStub.accessModifiers && Objects.equals(fieldName, fieldStub.fieldName) && Objects.equals(desc, fieldStub.desc) && Objects.equals(signature, fieldStub.signature) && Objects.equals(value, fieldStub.value);
+    }
+
+    @Override
+    public String toString() {
+        return "FieldStub{" +
+               "fieldName='" + fieldName + '\'' +
+               ", accessModifiers=" + accessModifiers +
+               ", desc='" + desc + '\'' +
+               ", signature='" + signature + '\'' +
+               ", value=" + value +
+               ", annotations=" + annotations +
+               '}';
+    }
 }
 
 class AnnotationStub {
@@ -118,6 +183,22 @@ class AnnotationStub {
 
     public AnnotationStub(String className) {
         this.className = className;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AnnotationStub that = (AnnotationStub) o;
+        return Objects.equals(className, that.className) && Objects.equals(members, that.members);
+    }
+
+    @Override
+    public String toString() {
+        return "AnnotationStub{" +
+               "className='" + className + '\'' +
+               ", members=" + members +
+               '}';
     }
 }
 
@@ -142,6 +223,22 @@ class EnumConstantWrapper {
     public EnumConstantWrapper(String enumDesc, String constant) {
         this.enumDesc = enumDesc;
         this.constant = constant;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        EnumConstantWrapper that = (EnumConstantWrapper) o;
+        return Objects.equals(enumDesc, that.enumDesc) && Objects.equals(constant, that.constant);
+    }
+
+    @Override
+    public String toString() {
+        return "EnumConstantWrapper{" +
+               "enumDesc='" + enumDesc + '\'' +
+               ", constant='" + constant + '\'' +
+               '}';
     }
 }
 
