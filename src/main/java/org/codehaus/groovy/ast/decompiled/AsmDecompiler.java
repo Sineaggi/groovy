@@ -20,9 +20,24 @@ package org.codehaus.groovy.ast.decompiled;
 
 import groovy.lang.GroovyRuntimeException;
 import org.codehaus.groovy.util.URLStreams;
-import org.glavo.classfile.*;
-import org.glavo.classfile.attribute.ExceptionsAttribute;
-import org.glavo.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
+import org.glavo.classfile.AccessFlags;
+import org.glavo.classfile.AnnotationValue;
+import org.glavo.classfile.ClassElement;
+import org.glavo.classfile.ClassModel;
+import org.glavo.classfile.Classfile;
+import org.glavo.classfile.FieldElement;
+import org.glavo.classfile.FieldModel;
+import org.glavo.classfile.Interfaces;
+import org.glavo.classfile.MethodElement;
+import org.glavo.classfile.MethodModel;
+import org.glavo.classfile.Superclass;
+import org.glavo.classfile.attribute.*;
+import org.glavo.classfile.constantpool.ConstantValueEntry;
+import org.glavo.classfile.constantpool.DoubleEntry;
+import org.glavo.classfile.constantpool.FloatEntry;
+import org.glavo.classfile.constantpool.IntegerEntry;
+import org.glavo.classfile.constantpool.LongEntry;
+import org.glavo.classfile.constantpool.StringEntry;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -39,6 +54,8 @@ import java.lang.ref.SoftReference;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -95,6 +112,8 @@ public abstract class AsmDecompiler {
 
                 stub = nuParse(cm);
                 if (!Objects.equals(nuParse(cm), visitor.result)) {
+                    Files.write(Paths.get("C:\\Users\\Clayton\\Source\\groovy\\ours.txt"), nuParse(cm).toString().getBytes());
+                    Files.write(Paths.get("C:\\Users\\Clayton\\Source\\groovy\\theirs.txt"), visitor.result.toString().getBytes());
                     throw new RuntimeException("they not equal\n" + nuParse(cm) + "\n" + visitor.result);
                 }
                 //throw new RuntimeException("oh noz" + cm);
@@ -156,6 +175,7 @@ public abstract class AsmDecompiler {
         private RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotationsAttribute;
         private List<MethodModel> methodModels = new ArrayList<>();
         private List<FieldModel> fieldModels = new ArrayList<>();
+        private SignatureAttribute signatureAttribute;
         @Override
         public void accept(ClassElement classElement) {
             if (classElement instanceof AccessFlags) {
@@ -188,16 +208,25 @@ public abstract class AsmDecompiler {
                 }
                 runtimeVisibleAnnotationsAttribute = (RuntimeVisibleAnnotationsAttribute) classElement;
             }
+            if (classElement instanceof SignatureAttribute) {
+                signatureAttribute = (SignatureAttribute) classElement;
+            }
         }
         public ClassStub result() {
             int accessModifiers = accessFlags.flagsMask();
             String signature = null;
+            if (signatureAttribute != null) {
+                signature = signatureAttribute.signature().stringValue();
+            }
             String superName = superclass.superclassEntry().name().stringValue();
             String[] interfaceNames = interfaces.interfaces().stream().map(classEntry -> classEntry.name().stringValue()).toArray(String[]::new);
             ClassStub result = new ClassStub(className, accessModifiers, signature, superName, interfaceNames);
             methodModels.forEach(methodModel -> {
                 if (result.methods == null) result.methods = new ArrayList<>();
                 String methodName = methodModel.methodName().stringValue();
+                if ("<clinit>".equals(methodName)) {
+                    return;
+                }
                 String desc = methodModel.methodType().stringValue();
                 MethodElementConsumer methodElementConsumer = new MethodElementConsumer(methodName, desc);
                 methodModel.forEach(methodElement -> {
@@ -271,6 +300,10 @@ public abstract class AsmDecompiler {
         private final String methodName;
         private final String desc;
         private AccessFlags accessFlags;
+        private SignatureAttribute signatureAttribute;
+        private RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotationsAttribute;
+        private ExceptionsAttribute exceptionsAttribute;
+        private AnnotationDefaultAttribute annotationDefaultAttribute;
         public MethodElementConsumer(String methodName, String desc) {
             this.methodName = methodName;
             this.desc = desc;
@@ -282,20 +315,80 @@ public abstract class AsmDecompiler {
                 accessFlags = (AccessFlags) methodElement;
             }
             if (methodElement instanceof ExceptionsAttribute) {
-                throw new RuntimeException("Unsupported method that throws exceptions " + methodElement);
+                exceptionsAttribute = (ExceptionsAttribute) methodElement;
+                //throw new RuntimeException("Unsupported method that throws exceptions " + methodElement + " with exceptions " + exceptionsAttribute.exceptions());
             }
-            //if (methodElement instanceof Signature) {
-            //
-            //}
+            if (methodElement instanceof SignatureAttribute) {
+                signatureAttribute = (SignatureAttribute) methodElement;
+            }
+            if (methodElement instanceof RuntimeVisibleAnnotationsAttribute) {
+                if (runtimeVisibleAnnotationsAttribute != null) {
+                    throw new IllegalStateException("More than one RuntimeVisibleAnnotationsAttribute");
+                }
+                runtimeVisibleAnnotationsAttribute = (RuntimeVisibleAnnotationsAttribute) methodElement;
+            }
+            if (methodElement instanceof AnnotationDefaultAttribute) {
+                if (annotationDefaultAttribute != null) {
+                    throw new IllegalStateException("More than one AnnotationDefaultAttribute");
+                }
+                annotationDefaultAttribute = (AnnotationDefaultAttribute) methodElement;
+            }
         }
 
         public MethodStub result() {
             int accessModifiers = accessFlags.flagsMask();
             String signature = null;
+            if (signatureAttribute != null) {
+                signature = signatureAttribute.signature().stringValue();
+            }
             String[] exceptions = new String[]{};
-            MethodStub methodStub = new MethodStub(methodName, accessModifiers, desc, signature, exceptions);
-            methodStub.annotationDefault = new ArrayList(1);
-            return methodStub;
+            if (exceptionsAttribute != null) {
+                exceptions = exceptionsAttribute.exceptions().stream().map(i -> i.name().stringValue()).toArray(String[]::new);
+            }
+            MethodStub result = new MethodStub(methodName, accessModifiers, desc, signature, exceptions);
+            result.annotationDefault = new ArrayList(1);
+            if (annotationDefaultAttribute != null) {
+                AnnotationValue defaultValue = annotationDefaultAttribute.defaultValue();
+                result.annotationDefault = annotations(defaultValue);
+            }
+            if (runtimeVisibleAnnotationsAttribute != null) {
+                runtimeVisibleAnnotationsAttribute.annotations().forEach(annotation -> {
+                    System.out.println(annotation);
+                    AnnotationStub annotationStub = result.addAnnotation(annotation.className().stringValue());
+                    annotation.elements().forEach(annotationElement -> {
+                        System.out.println("annot elem " + annotationElement);
+                        AnnotationValue annotationValue = annotationElement.value();
+                        AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
+                        annotationValueConsumer.accept(annotationValue);
+                    });
+                    // todo: more stuff to annotationStub ?
+                });
+            }
+            return result;
+        }
+
+        private Object annotations(AnnotationValue defaultValue) {
+            if (defaultValue instanceof AnnotationValue.OfEnum) {
+                //if (true) return null;
+                AnnotationValue.OfEnum ofEnum = ((AnnotationValue.OfEnum) defaultValue);
+                return new EnumConstantWrapper(ofEnum.className().stringValue(), ofEnum.constantName().stringValue());
+                //return annotationDefault;
+                //result.annotationDefault = annotationDefault;
+            } else if (defaultValue instanceof AnnotationValue.OfBoolean) {
+                AnnotationValue.OfBoolean ofBoolean = ((AnnotationValue.OfBoolean) defaultValue);
+                if (true) throw new RuntimeException("tood " + defaultValue.getClass() + " wit val " + ofBoolean.booleanValue());
+                //AnnotationValue.OfBoolean ofBoolean = ((AnnotationValue.OfBoolean) defaultValue);
+                //return new ArrayList<>(1);
+                return null;
+                //return new EnumConstantWrapper(ofBoolean.className().stringValue(), ofEnum.constantName().stringValue());
+            } else if (defaultValue instanceof AnnotationValue.OfArray) {
+                //ArrayList annotationDefault = new ArrayList(1);
+                return ((AnnotationValue.OfArray) defaultValue).values().stream().map(i -> annotations(i)).collect(Collectors.toList());
+                //annotationDefault.set(0, ((AnnotationValue.OfArray) defaultValue).values().stringValue());
+                //result.annotationDefault = annotationDefault;
+            } else {
+                throw new RuntimeException("tood " + defaultValue.getClass());
+            }
         }
     }
 
@@ -304,6 +397,9 @@ public abstract class AsmDecompiler {
         private final String fieldName;
         private final String desc;
         private AccessFlags accessFlags;
+        private SignatureAttribute signatureAttribute;
+        private Object value;
+        private RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotationsAttribute;
 
         private FieldElementConsumer(String fieldName, String desc) {
             this.fieldName = fieldName;
@@ -315,14 +411,59 @@ public abstract class AsmDecompiler {
             if (fieldElement instanceof AccessFlags) {
                 accessFlags = (AccessFlags) fieldElement;
             }
+            if (fieldElement instanceof SignatureAttribute) {
+                signatureAttribute = (SignatureAttribute) fieldElement;
+            }
+            if (fieldElement instanceof ConstantValueAttribute) {
+                ConstantValueAttribute constantValueAttribute = (ConstantValueAttribute) fieldElement;
+                ConstantValueEntry constantValueEntry = constantValueAttribute.constant();
+                if (constantValueEntry instanceof DoubleEntry) {
+                    value = ((DoubleEntry) constantValueEntry).doubleValue();
+                } else if (constantValueEntry instanceof FloatEntry) {
+                    value = ((FloatEntry) constantValueEntry).floatValue();
+                } else if (constantValueEntry instanceof IntegerEntry) {
+                    value = ((IntegerEntry) constantValueEntry).intValue();
+                } else if (constantValueEntry instanceof LongEntry) {
+                    value = ((LongEntry) constantValueEntry).longValue();
+                } else if (constantValueEntry instanceof StringEntry) {
+                    value = ((StringEntry) constantValueEntry).stringValue();
+                } else {
+                    throw new RuntimeException("Encountered unsupported constant value of type " + constantValueEntry.getClass());
+                }
+            }
+            if (fieldElement instanceof RuntimeVisibleAnnotationsAttribute) {
+                runtimeVisibleAnnotationsAttribute = (RuntimeVisibleAnnotationsAttribute) fieldElement;
+            }
             System.out.println("field elem " + fieldElement);
         }
 
         public FieldStub result() {
-            final int accessModifiers = accessFlags.flagsMask();
-            final String signature = null;
-            final Object value = null;
-            return new FieldStub(fieldName, accessModifiers, desc, signature, value);
+            int accessModifiers = accessFlags.flagsMask();
+            if ("DYNAMIC_TYPE".equals(fieldName)) {
+                accessFlags.flagsMask();
+                AccessFlags.ofField();
+                //throw new RuntimeException("onoz " + accessModifiers + "  ugh " + Integer.toBinaryString(accessFlags.flagsMask()));
+                //throw new RuntimeException("onoz " + accessModifiers + "  ugh " + accessFlags.flags());
+            }
+            String signature = null;
+            if (signatureAttribute != null) {
+                signature = signatureAttribute.signature().stringValue();
+            }
+            FieldStub result = new FieldStub(fieldName, accessModifiers, desc, signature, value);
+            if (runtimeVisibleAnnotationsAttribute != null) {
+                runtimeVisibleAnnotationsAttribute.annotations().forEach(annotation -> {
+                    System.out.println(annotation);
+                    AnnotationStub annotationStub = result.addAnnotation(annotation.className().stringValue());
+                    annotation.elements().forEach(annotationElement -> {
+                        System.out.println("annot elem " + annotationElement);
+                        AnnotationValue annotationValue = annotationElement.value();
+                        AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
+                        annotationValueConsumer.accept(annotationValue);
+                    });
+                    // todo: more stuff to annotationStub ?
+                });
+            }
+            return result;
         }
 
     }
@@ -372,7 +513,7 @@ public abstract class AsmDecompiler {
         public MethodVisitor visitMethod(final int access, final String name, final String desc, final String signature, final String[] exceptions) {
             if ("<clinit>".equals(name)) return null;
 
-            MethodStub stub = new MethodStub(name, access, desc, signature, exceptions != null ? exceptions : EMPTY_STRING_ARRAY);
+            MethodStub stub = new MethodStub(name, access & 0b011111111111111111, desc, signature, exceptions != null ? exceptions : EMPTY_STRING_ARRAY);
             if (result.methods == null) result.methods = new ArrayList<>(1);
             result.methods.add(stub);
             return new MethodVisitor(api) {
@@ -440,7 +581,11 @@ public abstract class AsmDecompiler {
 
         @Override
         public FieldVisitor visitField(final int access, final String name, final String desc, final String signature, final Object value) {
-            FieldStub stub = new FieldStub(name, access, desc, signature, value);
+            if ("DYNAMIC_TYPE".equals(name)) {
+
+                //throw new RuntimeException("onoz bro" + name + " has flags " + access + " with bit pattern " + Integer.toBinaryString(access));
+            }
+            FieldStub stub = new FieldStub(name, access & 0b011111111111111111, desc, signature, value);
             if (result.fields == null) result.fields = new ArrayList<>(1);
             result.fields.add(stub);
             return new FieldVisitor(api) {
@@ -464,6 +609,8 @@ public abstract class AsmDecompiler {
 
         @Override
         public void visit(final String name, final Object value) {
+            if (value instanceof Boolean) throw new RuntimeException("oh we got visited " + "wit name " + name + " with val " + value);
+            //if (value != null) throw new RuntimeException("oh we got visited " + "wit name " + name + " with val " + value);
             visitAttribute(name, value instanceof Type ? new TypeWrapper(((Type) value).getDescriptor()) : value);
         }
 
