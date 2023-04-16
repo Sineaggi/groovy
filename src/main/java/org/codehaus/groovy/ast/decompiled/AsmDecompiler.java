@@ -219,6 +219,7 @@ public abstract class AsmDecompiler {
             String superName = superclass.superclassEntry().name().stringValue();
             String[] interfaceNames = interfaces.interfaces().stream().map(classEntry -> classEntry.name().stringValue()).toArray(String[]::new);
             ClassStub result = new ClassStub(className, accessModifiers, signature, superName, interfaceNames);
+            //accessModifiers
             methodModels.forEach(methodModel -> {
                 if (result.methods == null) result.methods = new ArrayList<>();
                 String methodName = methodModel.methodName().stringValue();
@@ -566,8 +567,7 @@ public abstract class AsmDecompiler {
 
         @Override
         public void visit(final int version, final int access, final String name, final String signature, final String superName, final String[] interfaceNames) {
-            System.out.println("ClassStub(className=" + fromInternalName(name) + ", accessModifiers=" + access + ", signature=" + signature + ", superName=" + superName + ", interfaceNames=" + Arrays.toString(interfaceNames));
-            result = new ClassStub(fromInternalName(name), access, signature, superName, interfaceNames);
+            result = new ClassStub(fromInternalName(name), access & 0b011111111111111111, signature, superName, interfaceNames);
         }
 
         @Override
