@@ -133,9 +133,6 @@ public abstract class AsmDecompiler {
         String className = dropFirstAndLastChar(fromInternalName(cm.thisClass().asSymbol().descriptorString()));
         ClassElementConsumer classElementConsumer = new ClassElementConsumer(className);
         cm.forEach(classElementConsumer);
-        cm.forEach(f -> {
-            System.out.println(f.toString());
-        });
         return classElementConsumer.result();
     }
 
@@ -172,6 +169,7 @@ public abstract class AsmDecompiler {
         private List<FieldModel> fieldModels = new ArrayList<>();
         private SignatureAttribute signatureAttribute;
         private InnerClassesAttribute innerClassesAttribute;
+        private PermittedSubclassesAttribute permittedSubclassesAttribute;
         @Override
         public void accept(ClassElement classElement) {
             if (classElement instanceof AccessFlags) {
@@ -208,6 +206,8 @@ public abstract class AsmDecompiler {
                 signatureAttribute = (SignatureAttribute) classElement;
             } else if (classElement instanceof InnerClassesAttribute) {
                 innerClassesAttribute = (InnerClassesAttribute) classElement;
+            } else if (classElement instanceof PermittedSubclassesAttribute) {
+                permittedSubclassesAttribute = (PermittedSubclassesAttribute) classElement;
             }
         }
         public ClassStub result() {
@@ -229,7 +229,6 @@ public abstract class AsmDecompiler {
                 String desc = methodModel.methodType().stringValue();
                 MethodElementConsumer methodElementConsumer = new MethodElementConsumer(methodName, desc);
                 methodModel.forEach(methodElement -> {
-                    System.out.println("mefod " + methodElement);
                     methodElementConsumer.accept(methodElement);
                 });
                 result.methods.add(methodElementConsumer.result());
@@ -241,17 +240,14 @@ public abstract class AsmDecompiler {
                 String desc = fieldModel.fieldType().stringValue();
                 FieldElementConsumer fieldElementConsumer = new FieldElementConsumer(fieldName, desc);
                 fieldModel.forEach(fieldElement -> {
-                    System.out.println("feld " + fieldElement);
                     fieldElementConsumer.accept(fieldElement);
                 });
                 result.fields.add(fieldElementConsumer.result());
             });
             if (runtimeVisibleAnnotationsAttribute != null) {
                 runtimeVisibleAnnotationsAttribute.annotations().forEach(annotation -> {
-                    System.out.println(annotation);
                     AnnotationStub annotationStub = result.addAnnotation(annotation.className().stringValue());
                     annotation.elements().forEach(annotationElement -> {
-                        System.out.println("annot elem " + annotationElement);
                         AnnotationValue annotationValue = annotationElement.value();
                         AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
                         annotationValueConsumer.accept(annotationValue);
@@ -266,6 +262,9 @@ public abstract class AsmDecompiler {
                         result.innerClassModifiers = innerClassInfo.flagsMask();
                     }
                 }
+            }
+            if (permittedSubclassesAttribute != null) {
+                result.permittedSubclasses.addAll(permittedSubclassesAttribute.permittedSubclasses().stream().map(i -> i.name().stringValue()).collect(Collectors.toList()));
             }
             //result.methods = methodModels.stream().map(i -> new MethodStub())
             return result;
@@ -310,30 +309,19 @@ public abstract class AsmDecompiler {
                     throw new UnsupportedOperationException("Does nested arrays make sense?");
                 }
                 ofArray.values().forEach(new AnnotationValueConsumer(members, name, true));
-                System.out.println("OFARRAY" + ofArray);
             } else if (annotationValue instanceof AnnotationValue.OfString) {
                 AnnotationValue.OfString ofString = (AnnotationValue.OfString) annotationValue;
-                //if (members.containsKey(name)) {
-                //    var flep = members.get(name);
-                //    var list = new ArrayList<>(1);
-                //    list.add(flep);
-                //    list.add(ofString.stringValue());
-                //    members.put(name, list);
-                //} else {
-                //    members.put(name, ofString.stringValue());
-                //}
                 put(ofString.stringValue());
             } else if (annotationValue instanceof AnnotationValue.OfClass) {
                 AnnotationValue.OfClass ofClass = (AnnotationValue.OfClass) annotationValue;
                 TypeWrapper typeWrapper = new TypeWrapper(ofClass.className().stringValue());
-                members.put(name, typeWrapper);
-                //throw new RuntimeException("o brez " + ofClass);
+                put(typeWrapper);
             } else if (annotationValue instanceof AnnotationValue.OfBoolean) {
                 AnnotationValue.OfBoolean ofBoolean = (AnnotationValue.OfBoolean) annotationValue;
-                members.put(name, ofBoolean);
+                put(ofBoolean.booleanValue());
             } else if (annotationValue instanceof AnnotationValue.OfInteger) {
                 AnnotationValue.OfInteger ofInteger = (AnnotationValue.OfInteger) annotationValue;
-                members.put(name, ofInteger.intValue());
+                put(ofInteger.intValue());
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
@@ -354,8 +342,8 @@ public abstract class AsmDecompiler {
         private RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotationsAttribute;
         private ExceptionsAttribute exceptionsAttribute;
         private AnnotationDefaultAttribute annotationDefaultAttribute;
-        private List<MethodParametersAttribute> methodParametersAttributes;
         private RuntimeVisibleParameterAnnotationsAttribute runtimeVisibleParameterAnnotationsAttribute;
+        private MethodParametersAttribute methodParametersAttribute;
         public MethodElementConsumer(String methodName, String desc) {
             this.methodName = methodName;
             this.desc = desc;
@@ -381,8 +369,7 @@ public abstract class AsmDecompiler {
                 }
                 annotationDefaultAttribute = (AnnotationDefaultAttribute) methodElement;
             } else if (methodElement instanceof MethodParametersAttribute) {
-                if (methodParametersAttributes == null) methodParametersAttributes = new ArrayList<>(1);
-                methodParametersAttributes.add((MethodParametersAttribute) methodElement);
+                methodParametersAttribute = (MethodParametersAttribute) methodElement;
             } else if (methodElement instanceof RuntimeVisibleParameterAnnotationsAttribute) {
                 runtimeVisibleParameterAnnotationsAttribute = (RuntimeVisibleParameterAnnotationsAttribute) methodElement;
             }
@@ -406,10 +393,8 @@ public abstract class AsmDecompiler {
             }
             if (runtimeVisibleAnnotationsAttribute != null) {
                 runtimeVisibleAnnotationsAttribute.annotations().forEach(annotation -> {
-                    System.out.println(annotation);
                     AnnotationStub annotationStub = result.addAnnotation(annotation.className().stringValue());
                     annotation.elements().forEach(annotationElement -> {
-                        System.out.println("annot elem " + annotationElement);
                         AnnotationValue annotationValue = annotationElement.value();
                         AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
                         annotationValueConsumer.accept(annotationValue);
@@ -418,11 +403,6 @@ public abstract class AsmDecompiler {
                 });
             }
             if (runtimeVisibleParameterAnnotationsAttribute != null) {
-                //methodParametersAttributes.forEach(f -> {
-                //    f.parameters().forEach(ff -> {
-                //        System.out.println("ffffffff" + ff);
-                //    });
-                //});
                 if (result.parameterAnnotations == null) result.parameterAnnotations = new HashMap<>(1);
                 int i = 0;
                 for (List<Annotation> parameterAnnotation : runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations()) {
@@ -432,7 +412,6 @@ public abstract class AsmDecompiler {
                             //annotation.elements().forEach();
 
                             annotation.elements().forEach(annotationElement -> {
-                                System.out.println("annot elem " + annotationElement);
                                 AnnotationValue annotationValue = annotationElement.value();
                                 AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
                                 annotationValueConsumer.accept(annotationValue);
@@ -441,13 +420,6 @@ public abstract class AsmDecompiler {
                             return annotationStub;
                         }).collect(Collectors.toList());
                         result.parameterAnnotations.put(i, list);
-
-                        //annotation.elements().forEach(annotationElement -> {
-                        //    System.out.println("annot elem " + annotationElement);
-                        //    AnnotationValue annotationValue = annotationElement.value();
-                        //    AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
-                        //    annotationValueConsumer.accept(annotationValue);
-                        //});
                     }
                     i++;
                     //for (Annotation annotation : parameterAnnotation) {
@@ -465,6 +437,11 @@ public abstract class AsmDecompiler {
                 //runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations().stream().map(i ->)
                 // todo: this needs to set result.parameterAnnotations
                 //result.parameterAnnotations;
+            }
+            if (methodParametersAttribute != null) {
+                //if (result.parameterNames == null) result.parameterNames = new ArrayList<>(1);
+                // todo: bug here: how to handle name().get() failure?
+                result.parameterNames = methodParametersAttribute.parameters().stream().map(i -> i.name().get().stringValue()).collect(Collectors.toList());
             }
             //parameterAnnotations
             return result;
@@ -497,6 +474,9 @@ public abstract class AsmDecompiler {
             } else if (defaultValue instanceof AnnotationValue.OfInteger) {
                 AnnotationValue.OfInteger ofInteger = (AnnotationValue.OfInteger) defaultValue;
                 return ofInteger.intValue();
+            } else if (defaultValue instanceof AnnotationValue.OfLong) {
+                AnnotationValue.OfLong ofLong = (AnnotationValue.OfLong) defaultValue;
+                return ofLong.longValue();
             } else {
                 throw new RuntimeException("tood " + defaultValue.getClass());
             }
@@ -545,7 +525,6 @@ public abstract class AsmDecompiler {
             if (fieldElement instanceof RuntimeVisibleAnnotationsAttribute) {
                 runtimeVisibleAnnotationsAttribute = (RuntimeVisibleAnnotationsAttribute) fieldElement;
             }
-            System.out.println("field elem " + fieldElement);
         }
 
         public FieldStub result() {
@@ -563,10 +542,8 @@ public abstract class AsmDecompiler {
             FieldStub result = new FieldStub(fieldName, accessModifiers, desc, signature, value);
             if (runtimeVisibleAnnotationsAttribute != null) {
                 runtimeVisibleAnnotationsAttribute.annotations().forEach(annotation -> {
-                    System.out.println(annotation);
                     AnnotationStub annotationStub = result.addAnnotation(annotation.className().stringValue());
                     annotation.elements().forEach(annotationElement -> {
-                        System.out.println("annot elem " + annotationElement);
                         AnnotationValue annotationValue = annotationElement.value();
                         AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
                         annotationValueConsumer.accept(annotationValue);
