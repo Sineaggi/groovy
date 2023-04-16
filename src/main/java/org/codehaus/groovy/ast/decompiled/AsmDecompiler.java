@@ -282,8 +282,12 @@ public abstract class AsmDecompiler {
                 members.put(name, of(ofEnum));
             } else if (annotationValue instanceof AnnotationValue.OfArray) {
                 AnnotationValue.OfArray ofArray = (AnnotationValue.OfArray) annotationValue;
-                members.put(name, ofArray.values().stream().map(i -> of((AnnotationValue.OfEnum)i)).collect(Collectors.toList()));
+                //members.put(name, ofArray.values().stream().map(i -> of(i)).collect(Collectors.toList()));
+                ofArray.values().forEach(this);
                 System.out.println("OFARRAY" + ofArray);
+            } else if (annotationValue instanceof AnnotationValue.OfString) {
+                AnnotationValue.OfString ofString = (AnnotationValue.OfString) annotationValue;
+                members.put(name, ofString.stringValue());
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
@@ -376,11 +380,7 @@ public abstract class AsmDecompiler {
                 //result.annotationDefault = annotationDefault;
             } else if (defaultValue instanceof AnnotationValue.OfBoolean) {
                 AnnotationValue.OfBoolean ofBoolean = ((AnnotationValue.OfBoolean) defaultValue);
-                if (true) throw new RuntimeException("tood " + defaultValue.getClass() + " wit val " + ofBoolean.booleanValue());
-                //AnnotationValue.OfBoolean ofBoolean = ((AnnotationValue.OfBoolean) defaultValue);
-                //return new ArrayList<>(1);
-                return null;
-                //return new EnumConstantWrapper(ofBoolean.className().stringValue(), ofEnum.constantName().stringValue());
+                return ofBoolean.booleanValue();
             } else if (defaultValue instanceof AnnotationValue.OfArray) {
                 //ArrayList annotationDefault = new ArrayList(1);
                 return ((AnnotationValue.OfArray) defaultValue).values().stream().map(i -> annotations(i)).collect(Collectors.toList());
@@ -609,7 +609,7 @@ public abstract class AsmDecompiler {
 
         @Override
         public void visit(final String name, final Object value) {
-            if (value instanceof Boolean) throw new RuntimeException("oh we got visited " + "wit name " + name + " with val " + value);
+            //if (value instanceof Boolean) throw new RuntimeException("oh we got visited " + "wit name " + name + " with val " + value);
             //if (value != null) throw new RuntimeException("oh we got visited " + "wit name " + name + " with val " + value);
             visitAttribute(name, value instanceof Type ? new TypeWrapper(((Type) value).getDescriptor()) : value);
         }
