@@ -276,33 +276,53 @@ public abstract class AsmDecompiler {
 
         private final Map<String, Object> members;
         private final String name;
+        private final boolean arrayBased;
 
         private AnnotationValueConsumer(Map<String, Object> members, String name) {
             this.members = members;
             this.name = name;
+            this.arrayBased = false;
+        }
+
+        private AnnotationValueConsumer(Map<String, Object> members, String name, boolean arrayBased) {
+            this.members = members;
+            this.name = name;
+            this.arrayBased = arrayBased;
+        }
+
+        private void put(Object value) {
+            if (arrayBased) {
+                ArrayList list = (ArrayList) members.computeIfAbsent(name, (f) -> new ArrayList<>(1));
+                list.add(value);
+            } else {
+                members.put(name, value);
+            }
         }
 
         @Override
         public void accept(AnnotationValue annotationValue) {
             if (annotationValue instanceof AnnotationValue.OfEnum) {
                 AnnotationValue.OfEnum ofEnum = (AnnotationValue.OfEnum) annotationValue;
-                members.put(name, of(ofEnum));
+                put(of(ofEnum));
             } else if (annotationValue instanceof AnnotationValue.OfArray) {
                 AnnotationValue.OfArray ofArray = (AnnotationValue.OfArray) annotationValue;
-                //members.put(name, ofArray.values().stream().map(i -> of(i)).collect(Collectors.toList()));
-                ofArray.values().forEach(this);
+                if (arrayBased) {
+                    throw new UnsupportedOperationException("Does nested arrays make sense?");
+                }
+                ofArray.values().forEach(new AnnotationValueConsumer(members, name, true));
                 System.out.println("OFARRAY" + ofArray);
             } else if (annotationValue instanceof AnnotationValue.OfString) {
                 AnnotationValue.OfString ofString = (AnnotationValue.OfString) annotationValue;
-                if (members.containsKey(name)) {
-                    var flep = members.get(name);
-                    var list = new ArrayList<>(1);
-                    list.add(flep);
-                    list.add(ofString.stringValue());
-                    members.put(name, list);
-                } else {
-                    members.put(name, ofString.stringValue());
-                }
+                //if (members.containsKey(name)) {
+                //    var flep = members.get(name);
+                //    var list = new ArrayList<>(1);
+                //    list.add(flep);
+                //    list.add(ofString.stringValue());
+                //    members.put(name, list);
+                //} else {
+                //    members.put(name, ofString.stringValue());
+                //}
+                put(ofString.stringValue());
             } else if (annotationValue instanceof AnnotationValue.OfClass) {
                 AnnotationValue.OfClass ofClass = (AnnotationValue.OfClass) annotationValue;
                 TypeWrapper typeWrapper = new TypeWrapper(ofClass.className().stringValue());
@@ -311,6 +331,9 @@ public abstract class AsmDecompiler {
             } else if (annotationValue instanceof AnnotationValue.OfBoolean) {
                 AnnotationValue.OfBoolean ofBoolean = (AnnotationValue.OfBoolean) annotationValue;
                 members.put(name, ofBoolean);
+            } else if (annotationValue instanceof AnnotationValue.OfInteger) {
+                AnnotationValue.OfInteger ofInteger = (AnnotationValue.OfInteger) annotationValue;
+                members.put(name, ofInteger.intValue());
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
