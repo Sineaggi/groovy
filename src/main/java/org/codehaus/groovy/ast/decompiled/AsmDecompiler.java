@@ -20,17 +20,7 @@ package org.codehaus.groovy.ast.decompiled;
 
 import groovy.lang.GroovyRuntimeException;
 import org.codehaus.groovy.util.URLStreams;
-import org.glavo.classfile.AccessFlags;
-import org.glavo.classfile.AnnotationValue;
-import org.glavo.classfile.ClassElement;
-import org.glavo.classfile.ClassModel;
-import org.glavo.classfile.Classfile;
-import org.glavo.classfile.FieldElement;
-import org.glavo.classfile.FieldModel;
-import org.glavo.classfile.Interfaces;
-import org.glavo.classfile.MethodElement;
-import org.glavo.classfile.MethodModel;
-import org.glavo.classfile.Superclass;
+import org.glavo.classfile.*;
 import org.glavo.classfile.attribute.*;
 import org.glavo.classfile.constantpool.ConstantValueEntry;
 import org.glavo.classfile.constantpool.DoubleEntry;
@@ -181,6 +171,7 @@ public abstract class AsmDecompiler {
         private List<MethodModel> methodModels = new ArrayList<>();
         private List<FieldModel> fieldModels = new ArrayList<>();
         private SignatureAttribute signatureAttribute;
+        private InnerClassesAttribute innerClassesAttribute;
         @Override
         public void accept(ClassElement classElement) {
             if (classElement instanceof AccessFlags) {
@@ -215,6 +206,8 @@ public abstract class AsmDecompiler {
             }
             if (classElement instanceof SignatureAttribute) {
                 signatureAttribute = (SignatureAttribute) classElement;
+            } else if (classElement instanceof InnerClassesAttribute) {
+                innerClassesAttribute = (InnerClassesAttribute) classElement;
             }
         }
         public ClassStub result() {
@@ -265,6 +258,14 @@ public abstract class AsmDecompiler {
                     // todo: more stuff to annotationStub ?
                 });
             }
+            if (innerClassesAttribute != null) {
+                for (InnerClassInfo innerClassInfo : innerClassesAttribute.classes()) {
+                    String name = innerClassInfo.innerClass().name().stringValue();
+                    if (fromInternalName(name).equals(result.className)) {
+                        result.innerClassModifiers = innerClassInfo.flagsMask();
+                    }
+                }
+            }
             //result.methods = methodModels.stream().map(i -> new MethodStub())
             return result;
         }
@@ -292,7 +293,20 @@ public abstract class AsmDecompiler {
                 System.out.println("OFARRAY" + ofArray);
             } else if (annotationValue instanceof AnnotationValue.OfString) {
                 AnnotationValue.OfString ofString = (AnnotationValue.OfString) annotationValue;
-                members.put(name, ofString.stringValue());
+                if (members.containsKey(name)) {
+                    var flep = members.get(name);
+                    var list = new ArrayList<>(1);
+                    list.add(flep);
+                    list.add(ofString.stringValue());
+                    members.put(name, list);
+                } else {
+                    members.put(name, ofString.stringValue());
+                }
+            } else if (annotationValue instanceof AnnotationValue.OfClass) {
+                AnnotationValue.OfClass ofClass = (AnnotationValue.OfClass) annotationValue;
+                TypeWrapper typeWrapper = new TypeWrapper(ofClass.className().stringValue());
+                members.put(name, new TypeWrapper(ofClass.className().stringValue()));
+                //throw new RuntimeException("o brez " + ofClass);
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
@@ -314,6 +328,7 @@ public abstract class AsmDecompiler {
         private ExceptionsAttribute exceptionsAttribute;
         private AnnotationDefaultAttribute annotationDefaultAttribute;
         private List<MethodParametersAttribute> methodParametersAttributes;
+        private RuntimeVisibleParameterAnnotationsAttribute runtimeVisibleParameterAnnotationsAttribute;
         public MethodElementConsumer(String methodName, String desc) {
             this.methodName = methodName;
             this.desc = desc;
@@ -323,29 +338,26 @@ public abstract class AsmDecompiler {
         public void accept(MethodElement methodElement) {
             if (methodElement instanceof AccessFlags) {
                 accessFlags = (AccessFlags) methodElement;
-            }
-            if (methodElement instanceof ExceptionsAttribute) {
+            } else if (methodElement instanceof ExceptionsAttribute) {
                 exceptionsAttribute = (ExceptionsAttribute) methodElement;
                 //throw new RuntimeException("Unsupported method that throws exceptions " + methodElement + " with exceptions " + exceptionsAttribute.exceptions());
-            }
-            if (methodElement instanceof SignatureAttribute) {
+            } else if (methodElement instanceof SignatureAttribute) {
                 signatureAttribute = (SignatureAttribute) methodElement;
-            }
-            if (methodElement instanceof RuntimeVisibleAnnotationsAttribute) {
+            } else if (methodElement instanceof RuntimeVisibleAnnotationsAttribute) {
                 if (runtimeVisibleAnnotationsAttribute != null) {
                     throw new IllegalStateException("More than one RuntimeVisibleAnnotationsAttribute");
                 }
                 runtimeVisibleAnnotationsAttribute = (RuntimeVisibleAnnotationsAttribute) methodElement;
-            }
-            if (methodElement instanceof AnnotationDefaultAttribute) {
+            } else if (methodElement instanceof AnnotationDefaultAttribute) {
                 if (annotationDefaultAttribute != null) {
                     throw new IllegalStateException("More than one AnnotationDefaultAttribute");
                 }
                 annotationDefaultAttribute = (AnnotationDefaultAttribute) methodElement;
-            }
-            if (methodElement instanceof MethodParametersAttribute) {
+            } else if (methodElement instanceof MethodParametersAttribute) {
                 if (methodParametersAttributes == null) methodParametersAttributes = new ArrayList<>(1);
-                methodParametersAttributes.add((MethodParametersAttribute)methodElement);
+                methodParametersAttributes.add((MethodParametersAttribute) methodElement);
+            } else if (methodElement instanceof RuntimeVisibleParameterAnnotationsAttribute) {
+                runtimeVisibleParameterAnnotationsAttribute = (RuntimeVisibleParameterAnnotationsAttribute) methodElement;
             }
         }
 
@@ -378,12 +390,52 @@ public abstract class AsmDecompiler {
                     // todo: more stuff to annotationStub ?
                 });
             }
-            if (methodParametersAttributes != null) {
-                methodParametersAttributes.forEach(f -> {
-                    f.parameters().forEach(ff -> {
-                        System.out.println(ff);
-                    });
-                });
+            if (runtimeVisibleParameterAnnotationsAttribute != null) {
+                //methodParametersAttributes.forEach(f -> {
+                //    f.parameters().forEach(ff -> {
+                //        System.out.println("ffffffff" + ff);
+                //    });
+                //});
+                if (result.parameterAnnotations == null) result.parameterAnnotations = new HashMap<>(1);
+                int i = 0;
+                for (List<Annotation> parameterAnnotation : runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations()) {
+                    if (parameterAnnotation.size() > 0) {
+                        var list = parameterAnnotation.stream().map(annotation -> {
+                            var annotationStub = new AnnotationStub(annotation.className().stringValue());
+                            //annotation.elements().forEach();
+
+                            annotation.elements().forEach(annotationElement -> {
+                                System.out.println("annot elem " + annotationElement);
+                                AnnotationValue annotationValue = annotationElement.value();
+                                AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
+                                annotationValueConsumer.accept(annotationValue);
+                            });
+
+                            return annotationStub;
+                        }).collect(Collectors.toList());
+                        result.parameterAnnotations.put(i, list);
+
+                        //annotation.elements().forEach(annotationElement -> {
+                        //    System.out.println("annot elem " + annotationElement);
+                        //    AnnotationValue annotationValue = annotationElement.value();
+                        //    AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
+                        //    annotationValueConsumer.accept(annotationValue);
+                        //});
+                    }
+                    i++;
+                    //for (Annotation annotation : parameterAnnotation) {
+                    //
+                    //}
+                }
+                runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations().forEach(fle -> {
+                    fle.forEach(fla -> {
+                        //throw new RuntimeException("flaaaa "+ fla);
+                        }
+
+                    );
+                    }
+                );
+                //runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations().stream().map(i ->)
                 // todo: this needs to set result.parameterAnnotations
                 //result.parameterAnnotations;
             }
@@ -406,6 +458,9 @@ public abstract class AsmDecompiler {
                 return ((AnnotationValue.OfArray) defaultValue).values().stream().map(i -> annotations(i)).collect(Collectors.toList());
                 //annotationDefault.set(0, ((AnnotationValue.OfArray) defaultValue).values().stringValue());
                 //result.annotationDefault = annotationDefault;
+            } else if (defaultValue instanceof AnnotationValue.OfString) {
+                AnnotationValue.OfString ofString = ((AnnotationValue.OfString) defaultValue);
+                return ofString.stringValue();
             } else {
                 throw new RuntimeException("tood " + defaultValue.getClass());
             }
