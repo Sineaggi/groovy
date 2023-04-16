@@ -305,8 +305,11 @@ public abstract class AsmDecompiler {
             } else if (annotationValue instanceof AnnotationValue.OfClass) {
                 AnnotationValue.OfClass ofClass = (AnnotationValue.OfClass) annotationValue;
                 TypeWrapper typeWrapper = new TypeWrapper(ofClass.className().stringValue());
-                members.put(name, new TypeWrapper(ofClass.className().stringValue()));
+                members.put(name, typeWrapper);
                 //throw new RuntimeException("o brez " + ofClass);
+            } else if (annotationValue instanceof AnnotationValue.OfBoolean) {
+                AnnotationValue.OfBoolean ofBoolean = (AnnotationValue.OfBoolean) annotationValue;
+                members.put(name, ofBoolean);
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
@@ -461,6 +464,15 @@ public abstract class AsmDecompiler {
             } else if (defaultValue instanceof AnnotationValue.OfString) {
                 AnnotationValue.OfString ofString = ((AnnotationValue.OfString) defaultValue);
                 return ofString.stringValue();
+            } else if (defaultValue instanceof AnnotationValue.OfClass) {
+                AnnotationValue.OfClass ofClass = (AnnotationValue.OfClass) defaultValue;
+                return new TypeWrapper(ofClass.className().stringValue());
+            } else if (defaultValue instanceof AnnotationValue.OfCharacter) {
+                AnnotationValue.OfCharacter ofCharacter = (AnnotationValue.OfCharacter) defaultValue;
+                return ofCharacter.charValue();
+            } else if (defaultValue instanceof AnnotationValue.OfInteger) {
+                AnnotationValue.OfInteger ofInteger = (AnnotationValue.OfInteger) defaultValue;
+                return ofInteger.intValue();
             } else {
                 throw new RuntimeException("tood " + defaultValue.getClass());
             }
