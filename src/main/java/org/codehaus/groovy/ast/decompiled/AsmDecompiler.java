@@ -31,11 +31,7 @@ import org.glavo.classfile.Interfaces;
 import org.glavo.classfile.MethodElement;
 import org.glavo.classfile.MethodModel;
 import org.glavo.classfile.Superclass;
-import org.glavo.classfile.attribute.AnnotationDefaultAttribute;
-import org.glavo.classfile.attribute.ConstantValueAttribute;
-import org.glavo.classfile.attribute.ExceptionsAttribute;
-import org.glavo.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
-import org.glavo.classfile.attribute.SignatureAttribute;
+import org.glavo.classfile.attribute.*;
 import org.glavo.classfile.constantpool.ConstantValueEntry;
 import org.glavo.classfile.constantpool.DoubleEntry;
 import org.glavo.classfile.constantpool.FloatEntry;
@@ -317,6 +313,7 @@ public abstract class AsmDecompiler {
         private RuntimeVisibleAnnotationsAttribute runtimeVisibleAnnotationsAttribute;
         private ExceptionsAttribute exceptionsAttribute;
         private AnnotationDefaultAttribute annotationDefaultAttribute;
+        private List<MethodParametersAttribute> methodParametersAttributes;
         public MethodElementConsumer(String methodName, String desc) {
             this.methodName = methodName;
             this.desc = desc;
@@ -345,6 +342,10 @@ public abstract class AsmDecompiler {
                     throw new IllegalStateException("More than one AnnotationDefaultAttribute");
                 }
                 annotationDefaultAttribute = (AnnotationDefaultAttribute) methodElement;
+            }
+            if (methodElement instanceof MethodParametersAttribute) {
+                if (methodParametersAttributes == null) methodParametersAttributes = new ArrayList<>(1);
+                methodParametersAttributes.add((MethodParametersAttribute)methodElement);
             }
         }
 
@@ -377,6 +378,16 @@ public abstract class AsmDecompiler {
                     // todo: more stuff to annotationStub ?
                 });
             }
+            if (methodParametersAttributes != null) {
+                methodParametersAttributes.forEach(f -> {
+                    f.parameters().forEach(ff -> {
+                        System.out.println(ff);
+                    });
+                });
+                // todo: this needs to set result.parameterAnnotations
+                //result.parameterAnnotations;
+            }
+            //parameterAnnotations
             return result;
         }
 
