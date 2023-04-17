@@ -19,6 +19,7 @@
 package org.codehaus.groovy.ast.decompiled;
 
 import groovy.lang.GroovyRuntimeException;
+import org.apache.groovy.util.concurrent.ConcurrentReferenceHashMap;
 import org.codehaus.groovy.util.URLStreams;
 import org.glavo.classfile.*;
 import org.glavo.classfile.attribute.*;
@@ -322,6 +323,14 @@ public abstract class AsmDecompiler {
             } else if (annotationValue instanceof AnnotationValue.OfInteger) {
                 AnnotationValue.OfInteger ofInteger = (AnnotationValue.OfInteger) annotationValue;
                 put(ofInteger.intValue());
+            } else if (annotationValue instanceof AnnotationValue.OfAnnotation) {
+                AnnotationValue.OfAnnotation ofAnnotation = (AnnotationValue.OfAnnotation) annotationValue;
+                AnnotationStub annotationStub = new AnnotationStub(ofAnnotation.annotation().className().stringValue());
+                ofAnnotation.annotation().elements().forEach(annotationElement -> {
+                    AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue(), false);
+                    annotationValueConsumer.accept(annotationElement.value());
+                });
+                put(annotationStub);
             } else {
                 // todo: should probably not have code like this for forwards compat concerns
                 throw new RuntimeException("unsupported type " + annotationValue);
@@ -343,6 +352,7 @@ public abstract class AsmDecompiler {
         private ExceptionsAttribute exceptionsAttribute;
         private AnnotationDefaultAttribute annotationDefaultAttribute;
         private RuntimeVisibleParameterAnnotationsAttribute runtimeVisibleParameterAnnotationsAttribute;
+        private RuntimeInvisibleParameterAnnotationsAttribute runtimeInvisibleParameterAnnotationsAttribute;
         private MethodParametersAttribute methodParametersAttribute;
         public MethodElementConsumer(String methodName, String desc) {
             this.methodName = methodName;
@@ -372,6 +382,8 @@ public abstract class AsmDecompiler {
                 methodParametersAttribute = (MethodParametersAttribute) methodElement;
             } else if (methodElement instanceof RuntimeVisibleParameterAnnotationsAttribute) {
                 runtimeVisibleParameterAnnotationsAttribute = (RuntimeVisibleParameterAnnotationsAttribute) methodElement;
+            } else if (methodElement instanceof RuntimeInvisibleParameterAnnotationsAttribute) {
+                runtimeInvisibleParameterAnnotationsAttribute = (RuntimeInvisibleParameterAnnotationsAttribute) methodElement;
             }
         }
 
@@ -409,7 +421,6 @@ public abstract class AsmDecompiler {
                     if (parameterAnnotation.size() > 0) {
                         var list = parameterAnnotation.stream().map(annotation -> {
                             var annotationStub = new AnnotationStub(annotation.className().stringValue());
-                            //annotation.elements().forEach();
 
                             annotation.elements().forEach(annotationElement -> {
                                 AnnotationValue annotationValue = annotationElement.value();
@@ -422,21 +433,28 @@ public abstract class AsmDecompiler {
                         result.parameterAnnotations.put(i, list);
                     }
                     i++;
-                    //for (Annotation annotation : parameterAnnotation) {
-                    //
-                    //}
                 }
-                runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations().forEach(fle -> {
-                    fle.forEach(fla -> {
-                        //throw new RuntimeException("flaaaa "+ fla);
-                        }
+            }
+            if (runtimeInvisibleParameterAnnotationsAttribute != null) {
+                if (result.parameterAnnotations == null) result.parameterAnnotations = new HashMap<>(1);
+                int i = 0;
+                for (List<Annotation> parameterAnnotation : runtimeInvisibleParameterAnnotationsAttribute.parameterAnnotations()) {
+                    if (parameterAnnotation.size() > 0) {
+                        var list = parameterAnnotation.stream().map(annotation -> {
+                            var annotationStub = new AnnotationStub(annotation.className().stringValue());
 
-                    );
+                            annotation.elements().forEach(annotationElement -> {
+                                AnnotationValue annotationValue = annotationElement.value();
+                                AnnotationValueConsumer annotationValueConsumer = new AnnotationValueConsumer(annotationStub.members, annotationElement.name().stringValue());
+                                annotationValueConsumer.accept(annotationValue);
+                            });
+
+                            return annotationStub;
+                        }).collect(Collectors.toList());
+                        result.parameterAnnotations.put(i, list);
                     }
-                );
-                //runtimeVisibleParameterAnnotationsAttribute.parameterAnnotations().stream().map(i ->)
-                // todo: this needs to set result.parameterAnnotations
-                //result.parameterAnnotations;
+                    i++;
+                }
             }
             if (methodParametersAttribute != null) {
                 //if (result.parameterNames == null) result.parameterNames = new ArrayList<>(1);
@@ -599,7 +617,7 @@ public abstract class AsmDecompiler {
         @Override
         public MethodVisitor visitMethod(final int access, final String name, final String desc, final String signature, final String[] exceptions) {
             if ("<clinit>".equals(name)) return null;
-
+                                                                                //"1000000001000"
             MethodStub stub = new MethodStub(name, access & 0b011111111111111111, desc, signature, exceptions != null ? exceptions : EMPTY_STRING_ARRAY);
             if (result.methods == null) result.methods = new ArrayList<>(1);
             result.methods.add(stub);
